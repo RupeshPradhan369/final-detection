@@ -1,0 +1,14 @@
+```
+backend/venv/
+backend/.env
+frontend/node_modules/
+__pycache__/
+*.pyc
+
+models/
+*.pt
+*.bin
+*.pkl
+*.safetensors"models/" 
+"models/" 
+models/ 
