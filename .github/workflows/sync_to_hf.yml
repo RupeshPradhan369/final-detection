@@ -1,0 +1,41 @@
+name: Sync Backend to HuggingFace Space
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'backend/**'
+
+jobs:
+  sync-to-huggingface:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout GitHub repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: true
+
+      - name: Push backend to HuggingFace Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          git config --global user.email "sync@github.com"
+          git config --global user.name "GitHub Sync"
+
+          # Clone the HuggingFace Space
+          git clone https://dante369killer:$HF_TOKEN@huggingface.co/spaces/dante369killer/fake-news-detector-backend hf_space
+
+          # Copy backend files to space
+          cp -r backend/detector hf_space/
+          cp -r backend/core hf_space/
+          cp backend/manage.py hf_space/
+          cp backend/requirements.txt hf_space/
+          cp backend/Dockerfile hf_space/
+
+          # Push to HuggingFace
+          cd hf_space
+          git add .
+          git diff --cached --quiet || git commit -m "Auto-sync from GitHub: ${{ github.sha }}"
+          git push
