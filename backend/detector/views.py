@@ -605,3 +605,4 @@ def debug_nepali(request):
         'filtered_words': filtered[:10],
         'text_length': len(text)
     })# auto-sync test
+# sync test
