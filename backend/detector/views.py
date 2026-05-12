@@ -607,3 +607,4 @@ def debug_nepali(request):
     })# auto-sync test
 # sync test
 # test
+# test2
