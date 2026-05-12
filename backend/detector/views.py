@@ -41,18 +41,27 @@ def get_cached_feed(feed_url):
     return feed
 
 # ─── Credible Nepali Sources ──────────────────────────────────────────────────
+# Fix 1: Added ronbpost, ratopati full variants, and more Nepali sources
 CREDIBLE_NEPALI_SOURCES = [
     'online khabar', 'onlinekhabar',
-    'kathmandu post', 'kathamndu post',
-    'setopati', 'nepal khabar', 'nepalkhabar',
-    'gorkhapatra', 'ratopati',
+    'kathmandu post', 'kathmandu post',
+    'setopati',
+    'nepal khabar', 'nepalkhabar', 'nepalkhabar.com',
+    'gorkhapatra',
+    'ratopati', 'ratopati.com',
     'myrepublica', 'republica',
-    'the himalayan times', 'himalayan',
-    'rising nepal'
+    'the himalayan times', 'himalayan times', 'himalayan',
+    'rising nepal',
+    'ronb', 'ronbpost', 'राष्ट्रिय समाचार',          # ← NEW
+    'annapurna post', 'annapurnapost',                 # ← NEW
+    'nagarik', 'nagarik news',                         # ← NEW
+    'ekantipur', 'kantipurdaily',                      # ← NEW
 ]
 
 # ─── RSS Feed List ────────────────────────────────────────────────────────────
+# Fix 2: Added ronbpost and more Nepali RSS feeds
 RSS_FEEDS = [
+    # ── International ─────────────────────────────────────────────────────────
     'https://feeds.bbci.co.uk/news/rss.xml',
     'https://feeds.bbci.co.uk/news/world/rss.xml',
     'https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml',
@@ -64,10 +73,16 @@ RSS_FEEDS = [
     'https://feeds.skynews.com/feeds/rss/world.xml',
     'https://www.independent.co.uk/news/world/rss',
     'https://feeds.washingtonpost.com/rss/world',
+    # ── Nepali ────────────────────────────────────────────────────────────────
     'https://kathmandupost.com/rss',
     'https://www.onlinekhabar.com/feed',
     'https://www.setopati.com/feed',
     'https://www.nepalkhabar.com/feed',
+    'https://www.ronbpost.com/feed',                   # ← NEW
+    'https://www.ratopati.com/feed',                   # ← NEW
+    'https://annapurnapost.com/feed',                  # ← NEW
+    'https://nagariknews.nagariknetwork.com/feed',     # ← NEW
+    'https://ekantipur.com/rss',                       # ← NEW
 ]
 
 
@@ -83,8 +98,10 @@ def get_keywords(text, n=3):
     is_nepali = bool(re.search(r'[\u0900-\u097F]', text))
 
     if is_nepali:
+        # Fix 3: Increased word length filter from 3 to 4
+        # to avoid generic short words being used as keywords
         words = text.split()
-        keywords = [w.strip('।,?!\'') for w in words if len(w) > 3]
+        keywords = [w.strip('।,?!\' ') for w in words if len(w) > 4]
         seen = set()
         result = []
         for kw in keywords:
@@ -140,8 +157,22 @@ def check_google_factcheck(keywords):
             response = requests.get(url, params=params, timeout=5)
             data = response.json()
             claims = data.get('claims', [])
+
             for claim in claims[:3]:
                 review = claim.get('claimReview', [{}])[0]
+                claim_text = claim.get('text', '').lower()
+
+                # Fix 4: Check if API result is actually relevant
+                # to the submitted article keywords
+                query_words = set(q.lower().split())
+                claim_words = set(claim_text.split())
+                overlap = query_words & claim_words
+
+                # Skip result if no keyword overlap with the claim
+                # (prevents completely unrelated fact checks showing up)
+                if len(query_words) > 2 and len(overlap) < 1:
+                    continue
+
                 result = {
                     'claim': claim.get('text', ''),
                     'publisher': review.get(
@@ -187,30 +218,44 @@ def check_rss_feeds(keywords, original_text=""):
                     def normalize(t):
                         return unicodedata.normalize('NFC', t.strip())
 
+                    # Fix 5: Increased word length filter from 2 to 3
+                    # to avoid short common words causing false matches
                     article_words = set(
                         normalize(w) for w in original_text.split()
-                        if len(w) > 2
+                        if len(w) > 3
                     )
                     headline_words = set(
                         normalize(w) for w in combined.split()
-                        if len(w) > 2
+                        if len(w) > 3
                     )
                     common_words = article_words & headline_words
+
+                    # Fix 6: Stricter matching thresholds
+                    # AND relevance ratio check to prevent unrelated matches
                     min_match = (
-                        2 if len(original_text.split()) < 20 else 3
+                        4 if len(original_text.split()) < 30 else 6
                     )
-                    if len(common_words) >= min_match:
+                    # Common words must be at least 8% of article words
+                    relevance_ratio = len(common_words) / max(
+                        len(article_words), 1
+                    )
+
+                    if (len(common_words) >= min_match
+                            and relevance_ratio >= 0.08):
                         score = len(common_words)
                         if score > best_score:
                             best_score = score
                             best_match = {
-                                'source': feed.feed.get('title', feed_url),
+                                'source': feed.feed.get(
+                                    'title', feed_url
+                                ),
                                 'title': title,
                                 'link': entry.get('link', ''),
                                 'match_score': score,
                                 'is_credible_nepali': is_credible_nepali
                             }
                 else:
+                    # English: TF-IDF cosine similarity (unchanged)
                     try:
                         vectorizer = TfidfVectorizer()
                         tfidf = vectorizer.fit_transform(
@@ -222,7 +267,9 @@ def check_rss_feeds(keywords, original_text=""):
                         if score > 0.30 and score > best_score:
                             best_score = score
                             best_match = {
-                                'source': feed.feed.get('title', feed_url),
+                                'source': feed.feed.get(
+                                    'title', feed_url
+                                ),
                                 'title': title,
                                 'link': entry.get('link', ''),
                                 'match_score': round(float(score), 3),
@@ -235,7 +282,7 @@ def check_rss_feeds(keywords, original_text=""):
         except Exception:
             return None
 
-    with ThreadPoolExecutor(max_workers=10) as executor:
+    with ThreadPoolExecutor(max_workers=15) as executor:
         futures = {
             executor.submit(check_single_feed, url): url
             for url in RSS_FEEDS
@@ -285,17 +332,20 @@ def compute_unified_score(fake_prob, rss_score, api_found,
             elif any(r in rating for r in false_ratings):
                 api_component = 0.9
 
+    # Fix 7: Lowered cap for 2+ credible Nepali sources from 35% to 25%
+    # Makes real Nepali news score even lower (more confidently REAL)
     if credible_nepali_count >= 2:
         base_score = (
             fake_prob_normalized * 0.1 + (1 - rss_score) * 0.9
         )
-        return round(min(max(base_score * 100, 0), 35), 2)
+        return round(min(max(base_score * 100, 0), 25), 2)
 
+    # Fix 8: Lowered cap for 1 credible Nepali source from 49% to 40%
     if credible_nepali_count == 1:
         base_score = (
             fake_prob_normalized * 0.15 + (1 - rss_score) * 0.85
         )
-        return round(min(max(base_score * 100, 0), 49), 2)
+        return round(min(max(base_score * 100, 0), 40), 2)
 
     if rss_score >= 0.3:
         alpha, beta, gamma = 0.3, 0.6, 0.1
@@ -417,8 +467,6 @@ def predict(request):
 @api_view(['POST'])
 def explain(request):
     text = request.data.get('text', '').strip()
-
-    # ── Optional: link explanation to existing article ────────────────────────
     article_id = request.data.get('article_id', None)
 
     if not text or len(text) < 20:
@@ -474,19 +522,17 @@ def explain(request):
             for word, weight in exp.as_list()
         ]
 
-        # ── Save LIME explanation to database if article_id provided ──────────
         if article_id:
             try:
                 classification = ClassificationResult.objects.get(
                     article__id=article_id
                 )
-                # Update or create so only one explanation per result
                 LIMEExplanation.objects.update_or_create(
                     result=classification,
                     defaults={'word_scores': explanation}
                 )
             except ClassificationResult.DoesNotExist:
-                pass  # article_id invalid — still return explanation
+                pass
 
         return Response({'explanation': explanation})
 
