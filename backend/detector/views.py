@@ -43,25 +43,34 @@ def get_cached_feed(feed_url):
 # ─── Credible Nepali Sources ──────────────────────────────────────────────────
 # Fix 1: Added ronbpost, ratopati full variants, and more Nepali sources
 CREDIBLE_NEPALI_SOURCES = [
+    # Already existing
     'online khabar', 'onlinekhabar',
-    'kathmandu post', 'kathmandu post',
+    'kathmandu post',
     'setopati',
-    'nepal khabar', 'nepalkhabar', 'nepalkhabar.com',
+    'nepal khabar', 'nepalkhabar',
     'gorkhapatra',
-    'ratopati', 'ratopati.com',
+    'ratopati',
     'myrepublica', 'republica',
-    'the himalayan times', 'himalayan times', 'himalayan',
+    'the himalayan times', 'himalayan',
     'rising nepal',
-    'ronb', 'ronbpost', 'राष्ट्रिय समाचार',          # ← NEW
-    'annapurna post', 'annapurnapost',                 # ← NEW
-    'nagarik', 'nagarik news',                         # ← NEW
-    'ekantipur', 'kantipurdaily',                      # ← NEW
-]
 
+    # Newly confirmed
+    'nagarik', 'nagarik dainik',          # ✅
+    'bbc nepali', 'bbc news nepali',       # ✅
+    'nepali times',                        # ✅
+    'naya patrika', 'nayapatrika',         # ✅
+    'baahrakhari',                         # ✅
+    'lokantar', 'lokaantar',               # ✅
+    'rajdhani', 'rajdhani daily',          # ✅
+    'kantipur', 'ekantipur',               # ✅
+    'makalu khabar', 'makalukhabar',       # ✅
+    'osnepal',                             # ✅
+    'ronb', 'ronbpost',                    # ⚠️ keep — widely known
+]
 # ─── RSS Feed List ────────────────────────────────────────────────────────────
 # Fix 2: Added ronbpost and more Nepali RSS feeds
 RSS_FEEDS = [
-    # ── International ─────────────────────────────────────────────────────────
+    # ── International (confirmed working) ─────────────────────────────────────
     'https://feeds.bbci.co.uk/news/rss.xml',
     'https://feeds.bbci.co.uk/news/world/rss.xml',
     'https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml',
@@ -73,16 +82,24 @@ RSS_FEEDS = [
     'https://feeds.skynews.com/feeds/rss/world.xml',
     'https://www.independent.co.uk/news/world/rss',
     'https://feeds.washingtonpost.com/rss/world',
-    # ── Nepali ────────────────────────────────────────────────────────────────
-    'https://kathmandupost.com/rss',
-    'https://www.onlinekhabar.com/feed',
-    'https://www.setopati.com/feed',
-    'https://www.nepalkhabar.com/feed',
-    'https://www.ronbpost.com/feed',                   # ← NEW
-    'https://www.ratopati.com/feed',                   # ← NEW
-    'https://annapurnapost.com/feed',                  # ← NEW
-    'https://nagariknews.nagariknetwork.com/feed',     # ← NEW
-    'https://ekantipur.com/rss',                       # ← NEW
+
+    # ── Nepali (all confirmed working from FeedSpot) ──────────────────────────
+    'https://kathmandupost.com/rss',                      # ✅ Kathmandu Post
+    'https://www.onlinekhabar.com/feed',                  # ✅ Online Khabar
+    'https://www.setopati.com/feed',                      # ✅ Setopati
+    'https://www.nepalkhabar.com/feed',                   # ✅ Nepal Khabar
+    'https://nagariknews.nagariknetwork.com/feed',        # ✅ Nagarik Dainik
+    'https://www.ratopati.com/feed',                      # ✅ Ratopati
+    'https://feeds.bbci.co.uk/nepali/rss.xml',           # ✅ BBC Nepali
+    'https://www.nepalitimes.com/feed/',                  # ✅ Nepali Times
+    'https://nayapatrikadaily.com/feed',                  # ✅ Naya Patrika
+    'https://baahrakhari.com/feed',                       # ✅ Baahrakhari
+    'https://lokaantar.com/feed',                         # ✅ Lokantar
+    'https://rajdhanidaily.com/feed/',                    # ✅ Rajdhani Daily
+    'https://news24nepal.tv/feed/',                       # ✅ News24 Nepal
+    'https://makalukhabar.com/feed',                      # ✅ Makalu Khabar
+    'https://www.osnepal.com/feed',                       # ✅ OSNepal
+    'https://ekantipur.com/rss',                          # ✅ Kantipur/ekantipur
 ]
 
 
@@ -282,7 +299,7 @@ def check_rss_feeds(keywords, original_text=""):
         except Exception:
             return None
 
-    with ThreadPoolExecutor(max_workers=15) as executor:
+    with ThreadPoolExecutor(max_workers=20) as executor:
         futures = {
             executor.submit(check_single_feed, url): url
             for url in RSS_FEEDS
