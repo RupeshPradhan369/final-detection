@@ -12,15 +12,16 @@ class ModelSingleton:
         self.model = None
         self.tokenizer = None
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        self._load_model()
+        # NO _load_model() here anymore — loads lazily on first predict
 
     def _load_model(self):
-        print(f"Loading model from HuggingFace: {HF_MODEL_REPO}")
-        self.tokenizer = AutoTokenizer.from_pretrained(HF_MODEL_REPO)
-        self.model = AutoModelForSequenceClassification.from_pretrained(HF_MODEL_REPO)
-        self.model.to(self.device)
-        self.model.eval()
-        print("Model loaded successfully!")
+        if self.model is None:
+            print(f"Loading model from HuggingFace: {HF_MODEL_REPO}")
+            self.tokenizer = AutoTokenizer.from_pretrained(HF_MODEL_REPO)
+            self.model = AutoModelForSequenceClassification.from_pretrained(HF_MODEL_REPO)
+            self.model.to(self.device)
+            self.model.eval()
+            print("Model loaded successfully!")
 
     @classmethod
     def get_instance(cls):
@@ -31,6 +32,10 @@ class ModelSingleton:
         return cls._instance
 
     def predict(self, text):
+        # Load model here only when needed
+        with self._lock:
+            self._load_model()
+
         inputs = self.tokenizer(
             text,
             truncation=True,
