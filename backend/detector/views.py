@@ -17,13 +17,15 @@ from keybert import KeyBERT
 from django.conf import settings
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.metrics.pairwise import cosine_similarity
+from sentence_transformers import SentenceTransformer
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import unicodedata
 
-# ─── Initialize KeyBERT once ─────────────────────────────────────────────────
+# ─── Initialize Models ────────────────────────────────────────────────────────
 kw_model = KeyBERT()
+semantic_model = SentenceTransformer('sentence-transformers/distiluse-base-multilingual-cased-v2')
 
 # ─── RSS Cache ────────────────────────────────────────────────────────────────
 _rss_cache = {}
@@ -41,9 +43,7 @@ def get_cached_feed(feed_url):
     return feed
 
 # ─── Credible Nepali Sources ──────────────────────────────────────────────────
-# Fix 1: Added ronbpost, ratopati full variants, and more Nepali sources
 CREDIBLE_NEPALI_SOURCES = [
-    # Already existing
     'online khabar', 'onlinekhabar',
     'kathmandu post',
     'setopati',
@@ -53,24 +53,33 @@ CREDIBLE_NEPALI_SOURCES = [
     'myrepublica', 'republica',
     'the himalayan times', 'himalayan',
     'rising nepal',
-
-    # Newly confirmed
-    'nagarik', 'nagarik dainik',          # ✅
-    'bbc nepali', 'bbc news nepali',       # ✅
-    'nepali times',                        # ✅
-    'naya patrika', 'nayapatrika',         # ✅
-    'baahrakhari',                         # ✅
-    'lokantar', 'lokaantar',               # ✅
-    'rajdhani', 'rajdhani daily',          # ✅
-    'kantipur', 'ekantipur',               # ✅
-    'makalu khabar', 'makalukhabar',       # ✅
-    'osnepal',                             # ✅
-    'ronb', 'ronbpost',                    # ⚠️ keep — widely known
+    'nagarik', 'nagarik dainik',
+    'bbc nepali', 'bbc news nepali',
+    'nepali times',
+    'naya patrika', 'nayapatrika',
+    'baahrakhari',
+    'lokantar', 'lokaantar',
+    'rajdhani', 'rajdhani daily',
+    'kantipur', 'ekantipur',
+    'makalu khabar', 'makalukhabar',
+    'osnepal',
+    'ronb', 'ronbpost',
 ]
+
+# ─── Nepali Generic/Stopwords ─────────────────────────────────────────────────
+# Solution 3: Filter out generic Nepali keywords before API search
+NEPALI_STOPWORDS = {
+    'काठमाडौं', 'नेपाल', 'सरकार', 'गर्न', 'गरेको', 'भएको',
+    'बजेट', 'घोषणा', 'योजना', 'विकास', 'मन्त्री', 'मिनिस्टर',
+    'कार्यक्रम', 'कहिले', 'कहाँ', 'सभा', 'संसद', 'सरकारी',
+    'आर्थिक', 'वर्ष', 'नयाँ', 'विभिन्न', 'दिन', 'समय',
+    'लागि', 'गरिएको', 'भन्दै', 'भनेको', 'जनाए', 'बताए',
+    'छन्', 'छ।', 'हुने', 'गरेको', 'गर्दै', 'सार्वजनिक',
+}
+
 # ─── RSS Feed List ────────────────────────────────────────────────────────────
-# Fix 2: Added ronbpost and more Nepali RSS feeds
 RSS_FEEDS = [
-    # ── International (confirmed working) ─────────────────────────────────────
+    # ── International ─────────────────────────────────────────────────────────
     'https://feeds.bbci.co.uk/news/rss.xml',
     'https://feeds.bbci.co.uk/news/world/rss.xml',
     'https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml',
@@ -83,23 +92,23 @@ RSS_FEEDS = [
     'https://www.independent.co.uk/news/world/rss',
     'https://feeds.washingtonpost.com/rss/world',
 
-    # ── Nepali (all confirmed working from FeedSpot) ──────────────────────────
-    'https://kathmandupost.com/rss',                      # ✅ Kathmandu Post
-    'https://www.onlinekhabar.com/feed',                  # ✅ Online Khabar
-    'https://www.setopati.com/feed',                      # ✅ Setopati
-    'https://www.nepalkhabar.com/feed',                   # ✅ Nepal Khabar
-    'https://nagariknews.nagariknetwork.com/feed',        # ✅ Nagarik Dainik
-    'https://www.ratopati.com/feed',                      # ✅ Ratopati
-    'https://feeds.bbci.co.uk/nepali/rss.xml',           # ✅ BBC Nepali
-    'https://www.nepalitimes.com/feed/',                  # ✅ Nepali Times
-    'https://nayapatrikadaily.com/feed',                  # ✅ Naya Patrika
-    'https://baahrakhari.com/feed',                       # ✅ Baahrakhari
-    'https://lokaantar.com/feed',                         # ✅ Lokantar
-    'https://rajdhanidaily.com/feed/',                    # ✅ Rajdhani Daily
-    'https://news24nepal.tv/feed/',                       # ✅ News24 Nepal
-    'https://makalukhabar.com/feed',                      # ✅ Makalu Khabar
-    'https://www.osnepal.com/feed',                       # ✅ OSNepal
-    'https://ekantipur.com/rss',                          # ✅ Kantipur/ekantipur
+    # ── Nepali ────────────────────────────────────────────────────────────────
+    'https://kathmandupost.com/rss',
+    'https://www.onlinekhabar.com/feed',
+    'https://www.setopati.com/feed',
+    'https://www.nepalkhabar.com/feed',
+    'https://nagariknews.nagariknetwork.com/feed',
+    'https://www.ratopati.com/feed',
+    'https://feeds.bbci.co.uk/nepali/rss.xml',
+    'https://www.nepalitimes.com/feed/',
+    'https://nayapatrikadaily.com/feed',
+    'https://baahrakhari.com/feed',
+    'https://lokaantar.com/feed',
+    'https://rajdhanidaily.com/feed/',
+    'https://news24nepal.tv/feed/',
+    'https://makalukhabar.com/feed',
+    'https://www.osnepal.com/feed',
+    'https://ekantipur.com/rss',
 ]
 
 
@@ -115,8 +124,6 @@ def get_keywords(text, n=3):
     is_nepali = bool(re.search(r'[\u0900-\u097F]', text))
 
     if is_nepali:
-        # Fix 3: Increased word length filter from 3 to 4
-        # to avoid generic short words being used as keywords
         words = text.split()
         keywords = [w.strip('।,?!\' ') for w in words if len(w) > 4]
         seen = set()
@@ -150,8 +157,21 @@ def get_keywords(text, n=3):
         return filtered[:3]
 
 
+# ─── Solution 3: Filter Nepali Stopwords ─────────────────────────────────────
+def get_keywords_nepali_filtered(keywords):
+    """Filter out generic Nepali words before API search."""
+    return [kw for kw in keywords if kw not in NEPALI_STOPWORDS]
+
+
 # ─── Google Fact Check API ────────────────────────────────────────────────────
-def check_google_factcheck(keywords):
+def check_google_factcheck(keywords, language='en'):
+    """
+    Solution 2: Skip Google Fact Check API for Nepali.
+    Only use for English where it provides relevant results.
+    """
+    if language == 'ne':
+        return {'found': False, 'results': []}
+
     if not settings.GOOGLE_FACT_CHECK_API_KEY:
         return {'found': False, 'results': []}
     try:
@@ -178,15 +198,10 @@ def check_google_factcheck(keywords):
             for claim in claims[:3]:
                 review = claim.get('claimReview', [{}])[0]
                 claim_text = claim.get('text', '').lower()
-
-                # Fix 4: Check if API result is actually relevant
-                # to the submitted article keywords
                 query_words = set(q.lower().split())
                 claim_words = set(claim_text.split())
                 overlap = query_words & claim_words
 
-                # Skip result if no keyword overlap with the claim
-                # (prevents completely unrelated fact checks showing up)
                 if len(query_words) > 2 and len(overlap) < 1:
                     continue
 
@@ -208,9 +223,12 @@ def check_google_factcheck(keywords):
         return {'found': False, 'results': [], 'error': str(e)}
 
 
-# ─── RSS Feed Verification ────────────────────────────────────────────────────
-def check_rss_feeds(keywords, original_text=""):
-    is_nepali = bool(re.search(r'[\u0900-\u097F]', original_text))
+# ─── RSS Feed Verification with Semantic Similarity ──────────────────────────
+def check_rss_feeds(keywords, original_text="", language='en'):
+    """
+    Solution 1: Use semantic similarity for Nepali RSS matching.
+    For English, use TF-IDF cosine similarity (existing).
+    """
     matched_sources = []
 
     def check_single_feed(feed_url):
@@ -231,48 +249,38 @@ def check_rss_feeds(keywords, original_text=""):
                 if not combined:
                     continue
 
-                if is_nepali:
-                    def normalize(t):
-                        return unicodedata.normalize('NFC', t.strip())
+                if language == 'ne':
+                    # ─ Solution 1: Semantic Similarity for Nepali ──────────
+                    try:
+                        article_embedding = semantic_model.encode(
+                            original_text,
+                            convert_to_tensor=True
+                        )
+                        headline_embedding = semantic_model.encode(
+                            combined,
+                            convert_to_tensor=True
+                        )
+                        similarity = cosine_similarity(
+                            [article_embedding.cpu().numpy()],
+                            [headline_embedding.cpu().numpy()]
+                        )[0][0]
 
-                    # Fix 5: Increased word length filter from 2 to 3
-                    # to avoid short common words causing false matches
-                    article_words = set(
-                        normalize(w) for w in original_text.split()
-                        if len(w) > 3
-                    )
-                    headline_words = set(
-                        normalize(w) for w in combined.split()
-                        if len(w) > 3
-                    )
-                    common_words = article_words & headline_words
-
-                    # Fix 6: Stricter matching thresholds
-                    # AND relevance ratio check to prevent unrelated matches
-                    min_match = (
-                        4 if len(original_text.split()) < 30 else 6
-                    )
-                    # Common words must be at least 8% of article words
-                    relevance_ratio = len(common_words) / max(
-                        len(article_words), 1
-                    )
-
-                    if (len(common_words) >= min_match
-                            and relevance_ratio >= 0.08):
-                        score = len(common_words)
-                        if score > best_score:
-                            best_score = score
+                        # High semantic similarity threshold: 0.6+
+                        if similarity > 0.6 and similarity > best_score:
+                            best_score = similarity
                             best_match = {
                                 'source': feed.feed.get(
                                     'title', feed_url
                                 ),
                                 'title': title,
                                 'link': entry.get('link', ''),
-                                'match_score': score,
+                                'match_score': round(float(similarity), 3),
                                 'is_credible_nepali': is_credible_nepali
                             }
+                    except Exception:
+                        continue
                 else:
-                    # English: TF-IDF cosine similarity (unchanged)
+                    # ─ English: TF-IDF Cosine Similarity (unchanged) ───────
                     try:
                         vectorizer = TfidfVectorizer()
                         tfidf = vectorizer.fit_transform(
@@ -349,15 +357,12 @@ def compute_unified_score(fake_prob, rss_score, api_found,
             elif any(r in rating for r in false_ratings):
                 api_component = 0.9
 
-    # Fix 7: Lowered cap for 2+ credible Nepali sources from 35% to 25%
-    # Makes real Nepali news score even lower (more confidently REAL)
     if credible_nepali_count >= 2:
         base_score = (
             fake_prob_normalized * 0.1 + (1 - rss_score) * 0.9
         )
         return round(min(max(base_score * 100, 0), 25), 2)
 
-    # Fix 8: Lowered cap for 1 credible Nepali source from 49% to 40%
     if credible_nepali_count == 1:
         base_score = (
             fake_prob_normalized * 0.15 + (1 - rss_score) * 0.85
@@ -419,13 +424,21 @@ def predict(request):
         # ── Step 4: Extract keywords ──────────────────────────────────────────
         keywords = get_keywords(text)
 
-        # ── Step 5: Google Fact Check API ─────────────────────────────────────
-        api_result = check_google_factcheck(keywords)
+        # ── Step 5: Filter Nepali stopwords for API search (Solution 3) ──────
+        filtered_keywords = keywords
+        if language == 'ne':
+            filtered_keywords = get_keywords_nepali_filtered(keywords)
+            # If all keywords filtered out, use original
+            if not filtered_keywords:
+                filtered_keywords = keywords
 
-        # ── Step 6: RSS verification ──────────────────────────────────────────
-        rss_result = check_rss_feeds(keywords, text)
+        # ── Step 6: Google Fact Check API (Solution 2: skip for Nepali) ─────
+        api_result = check_google_factcheck(filtered_keywords, language)
 
-        # ── Step 7: Unified score ─────────────────────────────────────────────
+        # ── Step 7: RSS verification (Solution 1: semantic similarity) ──────
+        rss_result = check_rss_feeds(keywords, text, language)
+
+        # ── Step 8: Unified score ─────────────────────────────────────────────
         unified_score = compute_unified_score(
             prediction['fake_probability'],
             rss_result['rss_score'],
@@ -436,7 +449,7 @@ def predict(request):
 
         verdict = 'FAKE' if unified_score > 50 else 'REAL'
 
-        # ── Step 8: Save ClassificationResult to database ─────────────────────
+        # ── Step 9: Save ClassificationResult to database ─────────────────────
         classification = ClassificationResult.objects.create(
             article=article,
             label=prediction['label'],
@@ -447,14 +460,14 @@ def predict(request):
             verdict=verdict
         )
 
-        # ── Step 9: Save APIVerification to database ──────────────────────────
+        # ── Step 10: Save APIVerification to database ──────────────────────────
         APIVerification.objects.create(
             result=classification,
             found=api_result['found'],
             claims=api_result.get('results', [])
         )
 
-        # ── Step 10: Save RSSVerification to database ─────────────────────────
+        # ── Step 11: Save RSSVerification to database ──────────────────────────
         RSSVerification.objects.create(
             result=classification,
             matched_sources=rss_result.get('matched_sources', []),
@@ -462,7 +475,7 @@ def predict(request):
             coverage=rss_result['coverage']
         )
 
-        # ── Step 11: Return response ──────────────────────────────────────────
+        # ── Step 12: Return response ──────────────────────────────────────────
         return Response({
             'article_id': article.id,
             'prediction': prediction,
@@ -604,9 +617,4 @@ def debug_nepali(request):
         'words': words[:10],
         'filtered_words': filtered[:10],
         'text_length': len(text)
-    })# auto-sync test
-# sync test
-# test
-# test2
-# test3
-# sync final test
+    })
