@@ -57,7 +57,7 @@ function App() {
             Fake News Detection System
           </h1>
           <p style={{ color: '#64748b', fontSize: '15px' }}>
-            Multilingual AI-powered news verification — English & Nepali
+            
           </p>
         </div>
 

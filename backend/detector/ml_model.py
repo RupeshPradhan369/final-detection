@@ -1,7 +1,8 @@
 import torch
 from transformers import AutoTokenizer, AutoModelForSequenceClassification
-from django.conf import settings
 import threading
+
+HF_MODEL_REPO = "dante369killer/fake-news-detector-xml-roberta"
 
 class ModelSingleton:
     _instance = None
@@ -14,9 +15,9 @@ class ModelSingleton:
         self._load_model()
 
     def _load_model(self):
-        print(f"Loading model from {settings.MODEL_PATH}...")
-        self.tokenizer = AutoTokenizer.from_pretrained(settings.MODEL_PATH)
-        self.model = AutoModelForSequenceClassification.from_pretrained(settings.MODEL_PATH)
+        print(f"Loading model from HuggingFace: {HF_MODEL_REPO}")
+        self.tokenizer = AutoTokenizer.from_pretrained(HF_MODEL_REPO)
+        self.model = AutoModelForSequenceClassification.from_pretrained(HF_MODEL_REPO)
         self.model.to(self.device)
         self.model.eval()
         print("Model loaded successfully!")
