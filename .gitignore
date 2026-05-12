@@ -17,4 +17,4 @@ models/
 *.pt
 *.bin
 *.pkl
-*.safetensors
+*.safetensorsfake-news-detector-backend/
