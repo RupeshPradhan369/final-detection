@@ -10,12 +10,15 @@ on:
 jobs:
   sync-to-huggingface:
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - name: Checkout GitHub repo
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 1
           submodules: false
+          persist-credentials: false
 
       - name: Push backend to HuggingFace Space
         env:
@@ -23,19 +26,13 @@ jobs:
         run: |
           git config --global user.email "sync@github.com"
           git config --global user.name "GitHub Sync"
-
-          # Clone the HuggingFace Space
           git clone https://dante369killer:$HF_TOKEN@huggingface.co/spaces/dante369killer/fake-news-detector-backend hf_space
-
-          # Copy backend files to space
           cp -r backend/detector hf_space/
           cp -r backend/core hf_space/
           cp backend/manage.py hf_space/
-          cp backend/requirements.txt hf_space/
           cp backend/Dockerfile hf_space/
-
-          # Push to HuggingFace
+          cp requirements.txt hf_space/
           cd hf_space
           git add .
-          git diff --cached --quiet || git commit -m "Auto-sync from GitHub: ${{ github.sha }}"
+          git diff --cached --quiet || git commit -m "Auto-sync from GitHub ${{ github.sha }}"
           git push
