@@ -2,6 +2,7 @@ import logging
 import re
 import unicodedata
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import List, Dict, Any, Optional
 
 import feedparser
 import numpy as np
@@ -155,7 +156,7 @@ def _tfidf_similarity(text_a: str, text_b: str) -> float:
 # KEYWORDS
 # ──────────────────────────────────────────────────────────────────────────────
 
-def get_keywords(text: str, n: int = 5) -> list[str]:
+def get_keywords(text: str, n: int = 5) -> List[str]:
     """
     Nepali : frequency-ranked unique tokens after stopword removal.
     English: KeyBERT multi-word phrases with MMR diversity.
@@ -164,12 +165,12 @@ def get_keywords(text: str, n: int = 5) -> list[str]:
         words    = re.findall(r'[\u0900-\u097F]+', clean_text(text))
         filtered = [w for w in words if len(w) > 2 and w not in NEPALI_STOPWORDS]
 
-        freq: dict[str, int] = {}
+        freq: Dict[str, int] = {}
         for w in filtered:
             freq[w] = freq.get(w, 0) + 1
 
         seen: set[str] = set()
-        ranked: list[str] = []
+        ranked: List[str] = []
         for w in sorted(freq, key=lambda x: freq[x], reverse=True):
             if w not in seen:
                 seen.add(w)
@@ -214,7 +215,7 @@ def get_cached_feed(feed_url: str):
 # FACT-CHECK API
 # ──────────────────────────────────────────────────────────────────────────────
 
-def check_google_factcheck(keywords: list[str], original_text: str = '') -> dict:
+def check_google_factcheck(keywords: List[str], original_text: str = '') -> Dict[str, Any]:
     """
     Query Google Fact Check Tools API.
     Filters by similarity and boosts trusted publisher results.
@@ -277,7 +278,7 @@ def _check_single_feed(
     feed_url: str,
     cleaned_original: str,
     is_nepali_text: bool,
-) -> dict | None:
+) -> Optional[Dict[str, Any]]:
     """Check one RSS feed; return the best-matching entry or None."""
     try:
         feed = get_cached_feed(feed_url)
@@ -289,7 +290,7 @@ def _check_single_feed(
     is_credible_nepali = any(src in feed_title for src in CREDIBLE_NEPALI_SOURCES)
     threshold          = RSS_SIMILARITY_NEPALI if is_nepali_text else RSS_SIMILARITY_OTHER
 
-    best_match: dict | None = None
+    best_match: Optional[Dict[str, Any]] = None
     best_score = 0.0
 
     for entry in feed.entries[:20]:
@@ -314,7 +315,7 @@ def _check_single_feed(
     return best_match
 
 
-def check_rss_feeds(keywords: list[str], original_text: str = '') -> dict:
+def check_rss_feeds(keywords: List[str], original_text: str = '') -> Dict[str, Any]:
     """
     Parallel-scan all RSS_FEEDS.
     Score = weighted unique sources / RSS_SCORE_DIVISOR (capped at 1.0).
@@ -322,7 +323,7 @@ def check_rss_feeds(keywords: list[str], original_text: str = '') -> dict:
     """
     is_nepali_text   = _is_nepali(original_text)
     cleaned_original = clean_text(original_text)
-    matched_sources: list[dict] = []
+    matched_sources: List[Dict[str, Any]] = []
     seen_links: set[str]        = set()
 
     with ThreadPoolExecutor(max_workers=20) as executor:
@@ -367,23 +368,17 @@ def compute_unified_score(
     fake_prob: float,
     rss_score: float,
     api_found: bool,
-    api_results: list | None = None,
-    matched_sources: list | None = None,
+    api_results: Optional[List[Dict[str, Any]]] = None,
+    matched_sources: Optional[List[Dict[str, Any]]] = None,
 ) -> float:
     """
     Combine ML fake-probability, RSS coverage, and API verdict
     into a single 0–100 score (higher = more likely fake).
-
-    Strategy
-    ────────
-    ≥2 credible Nepali sources → trust RSS, cap output at 20
-    1  credible Nepali source  → cap output at 35
-    Fallback: dynamic alpha/beta/gamma based on rss_score magnitude
     """
     fake_prob_norm = fake_prob / 100.0
     rss_component  = 1.0 - rss_score
 
-    # ── API component ────────────────────────────────────────────────────────
+    # API component
     api_component = 0.5
     if api_found and api_results:
         for result in api_results:
@@ -395,7 +390,7 @@ def compute_unified_score(
                 api_component = 0.9
                 break
 
-    # ── Credible Nepali source override ──────────────────────────────────────
+    # Credible Nepali source override
     credible_count = sum(
         1 for s in (matched_sources or []) if s.get('is_credible_nepali')
     )
@@ -408,7 +403,7 @@ def compute_unified_score(
         raw = fake_prob_norm * 0.15 + rss_component * 0.85
         return round(min(max(raw * 100, 0), 35), 2)
 
-    # ── Dynamic weighted fallback ─────────────────────────────────────────────
+    # Dynamic weighted fallback
     if rss_score >= 0.4:
         alpha, beta, gamma = 0.25, 0.65, 0.10
     elif rss_score >= 0.2:
@@ -463,7 +458,7 @@ def predict(request):
         prediction = ml.predict(text)
         keywords   = get_keywords(text)
 
-        should_factcheck = prediction['fake_probability'] > FACTCHECK_THRESHOLD
+        should_factcheck = prediction.get('fake_probability', 0) > FACTCHECK_THRESHOLD
         api_result = (
             check_google_factcheck(keywords, text)
             if should_factcheck
@@ -472,9 +467,9 @@ def predict(request):
 
         rss_result    = check_rss_feeds(keywords, text)
         unified_score = compute_unified_score(
-            prediction['fake_probability'],
+            prediction.get('fake_probability', 0),
             rss_result['rss_score'],
-            api_result['found'],
+            api_result.get('found', False),
             api_result.get('results', []),
             rss_result.get('matched_sources', []),
         )
@@ -482,16 +477,16 @@ def predict(request):
 
         classification = ClassificationResult.objects.create(
             article=article,
-            label=prediction['label'],
-            confidence=prediction['confidence'],
-            fake_probability=prediction['fake_probability'],
-            real_probability=prediction['real_probability'],
+            label=prediction.get('label', ''),
+            confidence=prediction.get('confidence', 0.0),
+            fake_probability=prediction.get('fake_probability', 0.0),
+            real_probability=prediction.get('real_probability', 0.0),
             unified_score=unified_score,
             verdict=verdict,
         )
         APIVerification.objects.create(
             result=classification,
-            found=api_result['found'],
+            found=api_result.get('found', False),
             claims=api_result.get('results', []),
         )
         RSSVerification.objects.create(
@@ -521,7 +516,7 @@ def predict(request):
     except Exception as exc:
         logger.exception('Unhandled error in predict view')
         return Response(
-            {'error': str(exc)},
+            {'error': 'Internal server error.'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
@@ -539,7 +534,10 @@ def explain(request):
       Positive weight → pushes toward FAKE
       Negative weight → pushes toward REAL
 
-    Latency: ~10–30 s (200 forward passes through XLM-RoBERTa).
+    Notes:
+      - Uses a robust predict_proba wrapper that guarantees shape (n,2).
+      - Uses a split_expression that handles Nepali and English tokens.
+      - Returns a clear error message if explanation fails.
     """
     text       = request.data.get('text', '').strip()
     article_id = request.data.get('article_id')
@@ -555,16 +553,32 @@ def explain(request):
 
         ml = ModelSingleton.get_instance()
 
-        def predict_proba(texts: list[str]) -> np.ndarray:
+        # Determine label ordering from model if possible
+        # We want to return probabilities in order [P(REAL), P(FAKE)]
+        label_order = None
+        try:
+            # try common attributes
+            if hasattr(ml, 'id2label'):
+                id2label = getattr(ml, 'id2label')
+                if isinstance(id2label, dict):
+                    label_order = [id2label.get(0, '').upper(), id2label.get(1, '').upper()]
+            elif hasattr(ml, 'config') and hasattr(ml.config, 'id2label'):
+                id2label = ml.config.id2label
+                label_order = [id2label.get(0, '').upper(), id2label.get(1, '').upper()]
+        except Exception:
+            label_order = None
+
+        def predict_proba(texts: List[str]) -> np.ndarray:
             """
-            Called by LIME with ~200 perturbed samples.
+            Called by LIME with many perturbed samples.
             MUST return shape (n_samples, 2): [P(REAL), P(FAKE)] per row.
-            Returning wrong shape causes the single-bar bug.
             """
-            results = []
+            results: List[np.ndarray] = []
             for t in texts:
+                # minimal pre-clean to avoid tokenization surprises
+                t_clean = unicodedata.normalize('NFC', t)
                 inputs = ml.tokenizer(
-                    t,
+                    t_clean,
                     truncation=True,
                     max_length=256,
                     padding='max_length',
@@ -575,37 +589,92 @@ def explain(request):
                         input_ids=inputs['input_ids'].to(ml.device),
                         attention_mask=inputs['attention_mask'].to(ml.device),
                     )
-                    probs = torch.softmax(outputs.logits, dim=1)
-                results.append(probs[0].cpu().numpy())
+                    probs = torch.softmax(outputs.logits, dim=1).cpu().numpy()[0]
+
+                # Ensure we have two probabilities
+                if probs.size == 2:
+                    results.append(probs)
+                else:
+                    # If model returns different shape, try to coerce or log and fallback
+                    logger.error('predict_proba: unexpected probs shape %s for text length %d', probs.shape, len(t))
+                    # fallback: normalize whatever we have into two values
+                    arr = np.asarray(probs).astype(float)
+                    if arr.size == 1:
+                        results.append(np.array([1.0 - arr[0], arr[0]]))
+                    else:
+                        # reduce or pad to 2
+                        arr = arr.flatten()
+                        if arr.size > 2:
+                            arr = arr[:2]
+                        elif arr.size < 2:
+                            arr = np.pad(arr, (0, 2 - arr.size), constant_values=0.0)
+                        s = arr.sum()
+                        if s <= 0:
+                            results.append(np.array([0.5, 0.5]))
+                        else:
+                            results.append(arr / s)
 
             arr = np.array(results)
+            # Defensive checks
             if arr.ndim == 1:
-                arr = arr.reshape(1, -1)   # safety: guarantee 2D
+                arr = arr.reshape(1, -1)
+            if arr.shape[1] != 2:
+                # Try to reorder columns if label_order suggests reversed mapping
+                if label_order and label_order == ['FAKE', 'REAL']:
+                    arr = arr[:, ::-1]
+                else:
+                    # As a last resort, normalize rows to sum to 1 and ensure 2 columns
+                    try:
+                        arr = arr.reshape(arr.shape[0], -1)
+                        if arr.shape[1] > 2:
+                            arr = arr[:, :2]
+                        elif arr.shape[1] < 2:
+                            arr = np.pad(arr, ((0, 0), (0, 2 - arr.shape[1])), constant_values=0.0)
+                        row_sums = arr.sum(axis=1, keepdims=True)
+                        row_sums[row_sums == 0] = 1.0
+                        arr = arr / row_sums
+                    except Exception as e:
+                        logger.exception('predict_proba: cannot coerce probs to shape (n,2): %s', e)
+                        # return a neutral distribution to avoid crashing LIME
+                        return np.tile(np.array([0.5, 0.5]), (len(texts), 1))
+
             return arr
 
-        # ── Explainer config ─────────────────────────────────────────────────
-        # IMPORTANT:
-        #   bow=True + split_expression=r'\s+' for BOTH English and Nepali.
-        #   Using bow=False or split_expression=None caused the single-bar bug
-        #   where the entire article was treated as one token.
+        # Use a split_expression that handles Nepali script and English words
+        split_expr = r'[\u0900-\u097F]+|\w+'
+
         explainer = LimeTextExplainer(
             class_names=['REAL', 'FAKE'],
-            split_expression=r'\s+',
+            split_expression=split_expr,
             bow=True,
         )
 
-        exp = explainer.explain_instance(
-            text,
-            predict_proba,
-            num_features=10,
-            num_samples=200,
-            top_labels=1,
-        )
+        # Increase num_samples for more stable explanations; handle timeouts gracefully
+        try:
+            exp = explainer.explain_instance(
+                text,
+                predict_proba,
+                num_features=15,
+                num_samples=500,
+                top_labels=1,
+            )
+        except Exception as e:
+            logger.exception('LIME explain_instance failed: %s', e)
+            return Response(
+                {'error': 'LIME explanation failed. Try a shorter or cleaner article.'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            )
 
-        explanation = [
-            {'word': word, 'weight': round(float(weight), 4)}
-            for word, weight in exp.as_list()
-        ]
+        # Extract explanation for the top label (FAKE or REAL)
+        try:
+            # exp.as_list() returns list of (feature, weight) for the top label by default
+            explanation = [
+                {'word': word, 'weight': round(float(weight), 4)}
+                for word, weight in exp.as_list()
+            ]
+        except Exception as e:
+            logger.exception('Failed to parse LIME explanation: %s', e)
+            explanation = []
 
         if article_id:
             try:
@@ -627,7 +696,7 @@ def explain(request):
     except Exception as exc:
         logger.exception('Unhandled error in explain view')
         return Response(
-            {'error': str(exc)},
+            {'error': 'Internal server error while generating explanation.'},
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,
         )
 
