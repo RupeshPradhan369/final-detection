@@ -18,3 +18,4 @@ models/
 *.bin
 *.pkl
 *.safetensorsfake-news-detector-backend/
+fake-news-detector-backend/
