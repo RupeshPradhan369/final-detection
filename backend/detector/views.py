@@ -44,7 +44,6 @@ def get_cached_feed(feed_url):
 
 # ─── Credible Nepali Sources ──────────────────────────────────────────────────
 CREDIBLE_NEPALI_SOURCES = [
-    # Established English-language Nepali outlets
     'online khabar', 'onlinekhabar',
     'kathmandu post',
     'setopati',
@@ -54,7 +53,6 @@ CREDIBLE_NEPALI_SOURCES = [
     'myrepublica', 'republica',
     'the himalayan times', 'himalayan times', 'himalayan',
     'rising nepal',
-    # Additional confirmed credible sources
     'nagarik', 'nagarik dainik',
     'bbc nepali', 'bbc news nepali',
     'nepali times',
@@ -65,14 +63,13 @@ CREDIBLE_NEPALI_SOURCES = [
     'kantipur', 'ekantipur',
     'makalu khabar', 'makalukhabar',
     'osnepal',
-    # Widely read Nepali news portals
     'ronb', 'ronbpost',
     'annapurna post', 'annapurnapost',
 ]
 
 # ─── RSS Feed List ────────────────────────────────────────────────────────────
 RSS_FEEDS = [
-    # ── International (confirmed working) ─────────────────────────────────────
+    # ── International ─────────────────────────────────────────────────────────
     'https://feeds.bbci.co.uk/news/rss.xml',
     'https://feeds.bbci.co.uk/news/world/rss.xml',
     'https://rss.nytimes.com/services/xml/rss/nyt/HomePage.xml',
@@ -84,7 +81,7 @@ RSS_FEEDS = [
     'https://feeds.skynews.com/feeds/rss/world.xml',
     'https://www.independent.co.uk/news/world/rss',
     'https://feeds.washingtonpost.com/rss/world',
-    # ── Nepali (confirmed working) ────────────────────────────────────────────
+    # ── Nepali ────────────────────────────────────────────────────────────────
     'https://kathmandupost.com/rss',
     'https://www.onlinekhabar.com/feed',
     'https://www.setopati.com/feed',
@@ -108,7 +105,6 @@ RSS_FEEDS = [
 
 # ─── Language Detection ───────────────────────────────────────────────────────
 def detect_language(text):
-    """Detect if text is Nepali or English."""
     is_nepali = bool(re.search(r'[\u0900-\u097F]', text))
     return 'ne' if is_nepali else 'en'
 
@@ -118,7 +114,6 @@ def get_keywords(text, n=3):
     is_nepali = bool(re.search(r'[\u0900-\u097F]', text))
 
     if is_nepali:
-        # Increased word length filter to 4 to avoid generic short words
         words = text.split()
         keywords = [w.strip('।,?!\' ') for w in words if len(w) > 4]
         seen = set()
@@ -181,12 +176,10 @@ def check_google_factcheck(keywords):
                 review = claim.get('claimReview', [{}])[0]
                 claim_text = claim.get('text', '').lower()
 
-                # Relevance check — skip unrelated fact-check results
                 query_words = set(q.lower().split())
                 claim_words = set(claim_text.split())
                 overlap = query_words & claim_words
 
-                # Skip if no keyword overlap with the claim
                 if len(query_words) > 2 and len(overlap) < 1:
                     continue
 
@@ -208,32 +201,12 @@ def check_google_factcheck(keywords):
         return {'found': False, 'results': [], 'error': str(e)}
 
 
-# ─── RSS Feed Verification (Refined) ─────────────────────────────────────────
-#
-# Key improvements over original:
-#   1. Raised English cosine similarity threshold: 0.30 → 0.42
-#   2. Added headline keyword overlap check for English BEFORE TF-IDF
-#      (fast pre-filter: if <2 keywords appear in headline, skip TF-IDF)
-#   3. Normalized rss_score properly: based on matched count, not raw score sum
-#   4. Added per-match relevance gate: matched entry title must contain
-#      at least 1 extracted keyword (prevents topic-drift matches)
-#   5. Credible source bonus: credible Nepali sources weighted 1.5x
-#   6. Bigrams added to TF-IDF for better specificity
-#   7. Stricter Nepali word matching with relevance ratio check
-
+# ─── RSS Feed Verification ────────────────────────────────────────────────────
 def check_rss_feeds(keywords, original_text=""):
     is_nepali = bool(re.search(r'[\u0900-\u097F]', original_text))
     matched_sources = []
 
-    # Normalise keywords to lowercase for English matching
     kw_lower = [k.lower() for k in keywords]
-
-    def headline_contains_keyword(headline_text):
-        """Return True if at least 2 extracted keywords appear in the headline.
-        This is a fast pre-filter before running expensive TF-IDF."""
-        h = headline_text.lower()
-        hits = sum(1 for kw in kw_lower if kw in h)
-        return hits >= 2
 
     def check_single_feed(feed_url):
         try:
@@ -257,7 +230,6 @@ def check_rss_feeds(keywords, original_text=""):
                     def normalize(t):
                         return unicodedata.normalize('NFC', t.strip())
 
-                    # Word length filter increased to 3 (was 2)
                     article_words = set(
                         normalize(w) for w in original_text.split()
                         if len(w) > 3
@@ -268,11 +240,9 @@ def check_rss_feeds(keywords, original_text=""):
                     )
                     common_words = article_words & headline_words
 
-                    # Stricter minimum match threshold
                     min_match = (
                         4 if len(original_text.split()) < 30 else 6
                     )
-                    # Relevance ratio — common words must be 8%+ of article
                     relevance_ratio = len(common_words) / max(
                         len(article_words), 1
                     )
@@ -291,15 +261,8 @@ def check_rss_feeds(keywords, original_text=""):
                             }
 
                 else:
-                    # ── Fast pre-filter ───────────────────────────────────────
-                    # Skip TF-IDF if headline doesn't contain at least 2
-                    # extracted keywords — eliminates topic-drift matches cheaply
-                    if not headline_contains_keyword(title + ' ' + summary):
-                        continue
-
-                    # ── TF-IDF with bigrams ───────────────────────────────────
-                    # Threshold raised 0.30 → 0.42 for specificity
-                    # Bigrams (ngram_range 1,2) improve topic precision
+                    # English: TF-IDF with bigrams, threshold 0.42
+                    # title must contain at least 1 keyword
                     try:
                         vectorizer = TfidfVectorizer(
                             stop_words='english',
@@ -313,9 +276,6 @@ def check_rss_feeds(keywords, original_text=""):
                             tfidf[0:1], tfidf[1:2]
                         )[0][0]
 
-                        # ── Per-match relevance gate ──────────────────────────
-                        # Title (not just summary) must contain at least
-                        # 1 keyword — summaries can be generic filler text
                         title_lower = title.lower()
                         title_has_keyword = any(
                             kw in title_lower for kw in kw_lower
@@ -349,10 +309,7 @@ def check_rss_feeds(keywords, original_text=""):
             if result:
                 matched_sources.append(result)
 
-    # ── Proper rss_score calculation ──────────────────────────────────────────
-    # Old: summed raw scores (mixed units) / RSS_FEEDS * 2 — dimensionally wrong
-    # New: weighted count / total feeds — proportional and consistent
-    #   Each match = 1.0, credible Nepali match = 1.5 (stronger signal)
+    # Weighted count normalisation — credible Nepali sources = 1.5x
     if matched_sources:
         weighted_count = sum(
             1.5 if m.get('is_credible_nepali') else 1.0
@@ -394,21 +351,20 @@ def compute_unified_score(fake_prob, rss_score, api_found,
             elif any(r in rating for r in false_ratings):
                 api_component = 0.9
 
-    # 2+ credible Nepali sources → strong REAL signal → cap at 25%
+    # 2+ credible Nepali sources → cap at 25%
     if credible_nepali_count >= 2:
         base_score = (
             fake_prob_normalized * 0.1 + (1 - rss_score) * 0.9
         )
         return round(min(max(base_score * 100, 0), 25), 2)
 
-    # 1 credible Nepali source → moderate REAL signal → cap at 40%
+    # 1 credible Nepali source → cap at 40%
     if credible_nepali_count == 1:
         base_score = (
             fake_prob_normalized * 0.15 + (1 - rss_score) * 0.85
         )
         return round(min(max(base_score * 100, 0), 40), 2)
 
-    # Normal scoring based on RSS coverage
     if rss_score >= 0.3:
         alpha, beta, gamma = 0.3, 0.6, 0.1
     elif rss_score >= 0.15:
@@ -448,29 +404,22 @@ def predict(request):
         )
 
     try:
-        # ── Step 1: Detect language ───────────────────────────────────────────
         language = detect_language(text)
 
-        # ── Step 2: Save article to database ─────────────────────────────────
         article = Article.objects.create(
             text=text,
             language=language
         )
 
-        # ── Step 3: Model prediction ──────────────────────────────────────────
         ml = ModelSingleton.get_instance()
         prediction = ml.predict(text)
 
-        # ── Step 4: Extract keywords ──────────────────────────────────────────
         keywords = get_keywords(text)
 
-        # ── Step 5: Google Fact Check API ─────────────────────────────────────
         api_result = check_google_factcheck(keywords)
 
-        # ── Step 6: RSS verification ──────────────────────────────────────────
         rss_result = check_rss_feeds(keywords, text)
 
-        # ── Step 7: Unified score ─────────────────────────────────────────────
         unified_score = compute_unified_score(
             prediction['fake_probability'],
             rss_result['rss_score'],
@@ -481,7 +430,6 @@ def predict(request):
 
         verdict = 'FAKE' if unified_score > 50 else 'REAL'
 
-        # ── Step 8: Save ClassificationResult to database ─────────────────────
         classification = ClassificationResult.objects.create(
             article=article,
             label=prediction['label'],
@@ -492,14 +440,12 @@ def predict(request):
             verdict=verdict
         )
 
-        # ── Step 9: Save APIVerification to database ──────────────────────────
         APIVerification.objects.create(
             result=classification,
             found=api_result['found'],
             claims=api_result.get('results', [])
         )
 
-        # ── Step 10: Save RSSVerification to database ─────────────────────────
         RSSVerification.objects.create(
             result=classification,
             matched_sources=rss_result.get('matched_sources', []),
@@ -507,7 +453,6 @@ def predict(request):
             coverage=rss_result['coverage']
         )
 
-        # ── Step 11: Return response ──────────────────────────────────────────
         return Response({
             'article_id': article.id,
             'prediction': prediction,
@@ -584,7 +529,6 @@ def explain(request):
             for word, weight in exp.as_list()
         ]
 
-        # Save LIME explanation to database if article_id provided
         if article_id:
             try:
                 classification = ClassificationResult.objects.get(
@@ -650,4 +594,4 @@ def debug_nepali(request):
         'words': words[:10],
         'filtered_words': filtered[:10],
         'text_length': len(text)
-    })# updated
+    })
