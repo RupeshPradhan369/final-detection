@@ -30,6 +30,7 @@ _rss_cache = {}
 _rss_cache_time = {}
 RSS_CACHE_DURATION = 600  # 10 minutes
 
+
 def get_cached_feed(feed_url):
     now = time.time()
     if (feed_url in _rss_cache and
@@ -40,35 +41,36 @@ def get_cached_feed(feed_url):
     _rss_cache_time[feed_url] = now
     return feed
 
+
 # ─── Credible Nepali Sources ──────────────────────────────────────────────────
-# Fix 1: Added ronbpost, ratopati full variants, and more Nepali sources
 CREDIBLE_NEPALI_SOURCES = [
-    # Already existing
+    # Established English-language Nepali outlets
     'online khabar', 'onlinekhabar',
     'kathmandu post',
     'setopati',
     'nepal khabar', 'nepalkhabar',
     'gorkhapatra',
-    'ratopati',
+    'ratopati', 'ratopati.com',
     'myrepublica', 'republica',
-    'the himalayan times', 'himalayan',
+    'the himalayan times', 'himalayan times', 'himalayan',
     'rising nepal',
-
-    # Newly confirmed
-    'nagarik', 'nagarik dainik',          # ✅
-    'bbc nepali', 'bbc news nepali',       # ✅
-    'nepali times',                        # ✅
-    'naya patrika', 'nayapatrika',         # ✅
-    'baahrakhari',                         # ✅
-    'lokantar', 'lokaantar',               # ✅
-    'rajdhani', 'rajdhani daily',          # ✅
-    'kantipur', 'ekantipur',               # ✅
-    'makalu khabar', 'makalukhabar',       # ✅
-    'osnepal',                             # ✅
-    'ronb', 'ronbpost',                    # ⚠️ keep — widely known
+    # Additional confirmed credible sources
+    'nagarik', 'nagarik dainik',
+    'bbc nepali', 'bbc news nepali',
+    'nepali times',
+    'naya patrika', 'nayapatrika',
+    'baahrakhari',
+    'lokantar', 'lokaantar',
+    'rajdhani', 'rajdhani daily',
+    'kantipur', 'ekantipur',
+    'makalu khabar', 'makalukhabar',
+    'osnepal',
+    # Widely read Nepali news portals
+    'ronb', 'ronbpost',
+    'annapurna post', 'annapurnapost',
 ]
+
 # ─── RSS Feed List ────────────────────────────────────────────────────────────
-# Fix 2: Added ronbpost and more Nepali RSS feeds
 RSS_FEEDS = [
     # ── International (confirmed working) ─────────────────────────────────────
     'https://feeds.bbci.co.uk/news/rss.xml',
@@ -82,24 +84,25 @@ RSS_FEEDS = [
     'https://feeds.skynews.com/feeds/rss/world.xml',
     'https://www.independent.co.uk/news/world/rss',
     'https://feeds.washingtonpost.com/rss/world',
-
-    # ── Nepali (all confirmed working from FeedSpot) ──────────────────────────
-    'https://kathmandupost.com/rss',                      # ✅ Kathmandu Post
-    'https://www.onlinekhabar.com/feed',                  # ✅ Online Khabar
-    'https://www.setopati.com/feed',                      # ✅ Setopati
-    'https://www.nepalkhabar.com/feed',                   # ✅ Nepal Khabar
-    'https://nagariknews.nagariknetwork.com/feed',        # ✅ Nagarik Dainik
-    'https://www.ratopati.com/feed',                      # ✅ Ratopati
-    'https://feeds.bbci.co.uk/nepali/rss.xml',           # ✅ BBC Nepali
-    'https://www.nepalitimes.com/feed/',                  # ✅ Nepali Times
-    'https://nayapatrikadaily.com/feed',                  # ✅ Naya Patrika
-    'https://baahrakhari.com/feed',                       # ✅ Baahrakhari
-    'https://lokaantar.com/feed',                         # ✅ Lokantar
-    'https://rajdhanidaily.com/feed/',                    # ✅ Rajdhani Daily
-    'https://news24nepal.tv/feed/',                       # ✅ News24 Nepal
-    'https://makalukhabar.com/feed',                      # ✅ Makalu Khabar
-    'https://www.osnepal.com/feed',                       # ✅ OSNepal
-    'https://ekantipur.com/rss',                          # ✅ Kantipur/ekantipur
+    # ── Nepali (confirmed working) ────────────────────────────────────────────
+    'https://kathmandupost.com/rss',
+    'https://www.onlinekhabar.com/feed',
+    'https://www.setopati.com/feed',
+    'https://www.nepalkhabar.com/feed',
+    'https://nagariknews.nagariknetwork.com/feed',
+    'https://www.ratopati.com/feed',
+    'https://feeds.bbci.co.uk/nepali/rss.xml',
+    'https://www.nepalitimes.com/feed/',
+    'https://nayapatrikadaily.com/feed',
+    'https://baahrakhari.com/feed',
+    'https://lokaantar.com/feed',
+    'https://rajdhanidaily.com/feed/',
+    'https://news24nepal.tv/feed/',
+    'https://makalukhabar.com/feed',
+    'https://www.osnepal.com/feed',
+    'https://ekantipur.com/rss',
+    'https://www.ronbpost.com/feed',
+    'https://annapurnapost.com/feed',
 ]
 
 
@@ -115,8 +118,7 @@ def get_keywords(text, n=3):
     is_nepali = bool(re.search(r'[\u0900-\u097F]', text))
 
     if is_nepali:
-        # Fix 3: Increased word length filter from 3 to 4
-        # to avoid generic short words being used as keywords
+        # Increased word length filter to 4 to avoid generic short words
         words = text.split()
         keywords = [w.strip('।,?!\' ') for w in words if len(w) > 4]
         seen = set()
@@ -179,14 +181,12 @@ def check_google_factcheck(keywords):
                 review = claim.get('claimReview', [{}])[0]
                 claim_text = claim.get('text', '').lower()
 
-                # Fix 4: Check if API result is actually relevant
-                # to the submitted article keywords
+                # Relevance check — skip unrelated fact-check results
                 query_words = set(q.lower().split())
                 claim_words = set(claim_text.split())
                 overlap = query_words & claim_words
 
-                # Skip result if no keyword overlap with the claim
-                # (prevents completely unrelated fact checks showing up)
+                # Skip if no keyword overlap with the claim
                 if len(query_words) > 2 and len(overlap) < 1:
                     continue
 
@@ -208,10 +208,32 @@ def check_google_factcheck(keywords):
         return {'found': False, 'results': [], 'error': str(e)}
 
 
-# ─── RSS Feed Verification ────────────────────────────────────────────────────
+# ─── RSS Feed Verification (Refined) ─────────────────────────────────────────
+#
+# Key improvements over original:
+#   1. Raised English cosine similarity threshold: 0.30 → 0.42
+#   2. Added headline keyword overlap check for English BEFORE TF-IDF
+#      (fast pre-filter: if <2 keywords appear in headline, skip TF-IDF)
+#   3. Normalized rss_score properly: based on matched count, not raw score sum
+#   4. Added per-match relevance gate: matched entry title must contain
+#      at least 1 extracted keyword (prevents topic-drift matches)
+#   5. Credible source bonus: credible Nepali sources weighted 1.5x
+#   6. Bigrams added to TF-IDF for better specificity
+#   7. Stricter Nepali word matching with relevance ratio check
+
 def check_rss_feeds(keywords, original_text=""):
     is_nepali = bool(re.search(r'[\u0900-\u097F]', original_text))
     matched_sources = []
+
+    # Normalise keywords to lowercase for English matching
+    kw_lower = [k.lower() for k in keywords]
+
+    def headline_contains_keyword(headline_text):
+        """Return True if at least 2 extracted keywords appear in the headline.
+        This is a fast pre-filter before running expensive TF-IDF."""
+        h = headline_text.lower()
+        hits = sum(1 for kw in kw_lower if kw in h)
+        return hits >= 2
 
     def check_single_feed(feed_url):
         try:
@@ -235,8 +257,7 @@ def check_rss_feeds(keywords, original_text=""):
                     def normalize(t):
                         return unicodedata.normalize('NFC', t.strip())
 
-                    # Fix 5: Increased word length filter from 2 to 3
-                    # to avoid short common words causing false matches
+                    # Word length filter increased to 3 (was 2)
                     article_words = set(
                         normalize(w) for w in original_text.split()
                         if len(w) > 3
@@ -247,12 +268,11 @@ def check_rss_feeds(keywords, original_text=""):
                     )
                     common_words = article_words & headline_words
 
-                    # Fix 6: Stricter matching thresholds
-                    # AND relevance ratio check to prevent unrelated matches
+                    # Stricter minimum match threshold
                     min_match = (
                         4 if len(original_text.split()) < 30 else 6
                     )
-                    # Common words must be at least 8% of article words
+                    # Relevance ratio — common words must be 8%+ of article
                     relevance_ratio = len(common_words) / max(
                         len(article_words), 1
                     )
@@ -263,30 +283,50 @@ def check_rss_feeds(keywords, original_text=""):
                         if score > best_score:
                             best_score = score
                             best_match = {
-                                'source': feed.feed.get(
-                                    'title', feed_url
-                                ),
+                                'source': feed.feed.get('title', feed_url),
                                 'title': title,
                                 'link': entry.get('link', ''),
                                 'match_score': score,
                                 'is_credible_nepali': is_credible_nepali
                             }
+
                 else:
-                    # English: TF-IDF cosine similarity (unchanged)
+                    # ── Fast pre-filter ───────────────────────────────────────
+                    # Skip TF-IDF if headline doesn't contain at least 2
+                    # extracted keywords — eliminates topic-drift matches cheaply
+                    if not headline_contains_keyword(title + ' ' + summary):
+                        continue
+
+                    # ── TF-IDF with bigrams ───────────────────────────────────
+                    # Threshold raised 0.30 → 0.42 for specificity
+                    # Bigrams (ngram_range 1,2) improve topic precision
                     try:
-                        vectorizer = TfidfVectorizer()
+                        vectorizer = TfidfVectorizer(
+                            stop_words='english',
+                            min_df=1,
+                            ngram_range=(1, 2)
+                        )
                         tfidf = vectorizer.fit_transform(
                             [original_text.lower(), combined.lower()]
                         )
                         score = cosine_similarity(
                             tfidf[0:1], tfidf[1:2]
                         )[0][0]
-                        if score > 0.30 and score > best_score:
+
+                        # ── Per-match relevance gate ──────────────────────────
+                        # Title (not just summary) must contain at least
+                        # 1 keyword — summaries can be generic filler text
+                        title_lower = title.lower()
+                        title_has_keyword = any(
+                            kw in title_lower for kw in kw_lower
+                        )
+
+                        if (score > 0.42
+                                and title_has_keyword
+                                and score > best_score):
                             best_score = score
                             best_match = {
-                                'source': feed.feed.get(
-                                    'title', feed_url
-                                ),
+                                'source': feed.feed.get('title', feed_url),
                                 'title': title,
                                 'link': entry.get('link', ''),
                                 'match_score': round(float(score), 3),
@@ -309,17 +349,22 @@ def check_rss_feeds(keywords, original_text=""):
             if result:
                 matched_sources.append(result)
 
+    # ── Proper rss_score calculation ──────────────────────────────────────────
+    # Old: summed raw scores (mixed units) / RSS_FEEDS * 2 — dimensionally wrong
+    # New: weighted count / total feeds — proportional and consistent
+    #   Each match = 1.0, credible Nepali match = 1.5 (stronger signal)
     if matched_sources:
-        total_score = sum(
-            m.get('match_score', 1) for m in matched_sources
+        weighted_count = sum(
+            1.5 if m.get('is_credible_nepali') else 1.0
+            for m in matched_sources
         )
-        rss_score = min(total_score / (len(RSS_FEEDS) * 2), 1.0)
+        rss_score = min(weighted_count / len(RSS_FEEDS), 1.0)
     else:
         rss_score = 0.0
 
     return {
         'matched_sources': matched_sources,
-        'rss_score': round(rss_score, 2),
+        'rss_score': round(rss_score, 4),
         'coverage': f"{len(matched_sources)}/{len(RSS_FEEDS)} sources"
     }
 
@@ -349,21 +394,21 @@ def compute_unified_score(fake_prob, rss_score, api_found,
             elif any(r in rating for r in false_ratings):
                 api_component = 0.9
 
-    # Fix 7: Lowered cap for 2+ credible Nepali sources from 35% to 25%
-    # Makes real Nepali news score even lower (more confidently REAL)
+    # 2+ credible Nepali sources → strong REAL signal → cap at 25%
     if credible_nepali_count >= 2:
         base_score = (
             fake_prob_normalized * 0.1 + (1 - rss_score) * 0.9
         )
         return round(min(max(base_score * 100, 0), 25), 2)
 
-    # Fix 8: Lowered cap for 1 credible Nepali source from 49% to 40%
+    # 1 credible Nepali source → moderate REAL signal → cap at 40%
     if credible_nepali_count == 1:
         base_score = (
             fake_prob_normalized * 0.15 + (1 - rss_score) * 0.85
         )
         return round(min(max(base_score * 100, 0), 40), 2)
 
+    # Normal scoring based on RSS coverage
     if rss_score >= 0.3:
         alpha, beta, gamma = 0.3, 0.6, 0.1
     elif rss_score >= 0.15:
@@ -539,6 +584,7 @@ def explain(request):
             for word, weight in exp.as_list()
         ]
 
+        # Save LIME explanation to database if article_id provided
         if article_id:
             try:
                 classification = ClassificationResult.objects.get(
@@ -604,9 +650,4 @@ def debug_nepali(request):
         'words': words[:10],
         'filtered_words': filtered[:10],
         'text_length': len(text)
-    })# auto-sync test
-# sync test
-# test
-# test2
-# test3
-# sync final test
+    })
