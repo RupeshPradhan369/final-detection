@@ -261,8 +261,6 @@ def check_rss_feeds(keywords, original_text=""):
                             }
 
                 else:
-                    # English: TF-IDF with bigrams, threshold 0.42
-                    # title must contain at least 1 keyword
                     try:
                         vectorizer = TfidfVectorizer(
                             stop_words='english',
@@ -276,14 +274,26 @@ def check_rss_feeds(keywords, original_text=""):
                             tfidf[0:1], tfidf[1:2]
                         )[0][0]
 
-                        title_lower = title.lower()
+                        # Strip apostrophes before keyword matching
+                        # handles "King's" → "Kings", "PM" vs "Starmer"
+                        title_clean = re.sub(
+                            r"['\u2018\u2019\u201c\u201d]", '',
+                            title.lower()
+                        )
+                        kw_clean = [
+                            re.sub(r"['\u2018\u2019]", '', kw)
+                            for kw in kw_lower
+                        ]
                         title_has_keyword = any(
-                            kw in title_lower for kw in kw_lower
+                            kw in title_clean for kw in kw_clean
                         )
 
+                        # score > 0.55 fallback: if TF-IDF match is very
+                        # strong, pass even without keyword in title
+                        # (handles RSS abbreviations like "PM" vs "Starmer")
                         if (score > 0.42
-                                and title_has_keyword
-                                and score > best_score):
+                                and score > best_score
+                                and (title_has_keyword or score > 0.55)):
                             best_score = score
                             best_match = {
                                 'source': feed.feed.get('title', feed_url),
