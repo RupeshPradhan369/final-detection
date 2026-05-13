@@ -6,5 +6,5 @@ urlpatterns = [
     path('explain/', views.explain, name='explain'),
     path('health/', views.health_check, name='health'),
     path('debug-rss/', views.debug_rss, name='debug_rss'),
-    path('debug-nepali/', views.debug_nepali, name='debug_nepali'),
+    # path('debug-nepali/', views.debug_nepali, name='debug_nepali'),
 ]
