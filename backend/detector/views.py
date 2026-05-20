@@ -312,7 +312,7 @@ def check_rss_feeds(keywords, original_text=""):
                         score = cosine_similarity(
                             tfidf[0:1], tfidf[1:2]
                         )[0][0]
-                        if score > 0.30 and score > best_score:
+                        if score > 0.42 and score > best_score:
                             best_score = score
                             best_match = {
                                 'source': feed.feed.get('title', feed_url),
